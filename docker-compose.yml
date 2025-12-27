@@ -1,0 +1,109 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: search_engine_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    environment:
+      - MONGO_INITDB_DATABASE=search_engine
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+
+  crawler:
+    build: .
+    container_name: search_engine_crawler
+    depends_on:
+      - mongodb
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./stats:/app/stats_output
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MONGO_URI=mongodb://admin:admin123@mongodb:27017
+    command: python src/crawler.py config.yaml
+
+
+
+  stats:
+    image: info_poisk:latest
+    build: .
+    depends_on:
+      - mongodb
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./data:/app/data
+    command: python src/stats.py --config config.yaml
+    profiles: ["stats"]  
+
+  tokenizer:
+    image: info_poisk:latest
+    build: .
+    depends_on:
+      - mongodb
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./data:/app/data
+    command: >
+      bash -lc "
+      python src/export_corpus.py config.yaml data/corpus.jsonl &&
+      /app/bin/tokenizer data/corpus.jsonl data/tokens
+      "
+    profiles: ["tokenizer"]
+
+  zipf:
+    image: info_poisk:latest
+    build: .
+    volumes:
+      - ./data:/app/data
+    command: /app/bin/zipf
+    profiles: [ "zipf" ]
+
+  zipf_stem:
+    image: info_poisk:latest
+    build: .
+    volumes:
+      - ./data:/app/data
+    command: /app/bin/zipf data/tokens/tokens_stem.tsv data/zipf_stem 50
+    profiles: [ "zipf_stem" ]
+
+  stemmer:
+    image: info_poisk:latest
+    build: .
+    volumes:
+      - ./data:/app/data
+    command: /app/bin/stemmer
+    profiles: [ "stemmer" ]
+
+  indexer:
+    image: info_poisk:latest
+    build: .
+    depends_on:
+      - mongodb
+    stdin_open: true         
+    tty: true
+    volumes:
+      - ./data:/app/data
+    command: /app/bin/indexer
+    profiles: [ "indexer" ]
+
+  searching:
+    image: info_poisk:latest
+    build: .
+    depends_on:
+      - mongodb
+    volumes:
+      - ./test1.txt:/app/test1.txt
+      - ./data:/app/data
+    stdin_open: true         
+    tty: true
+    command: /app/bin/searching /app/test1.txt
+    profiles: [ "searching" ]
+
+volumes:
+  mongodb_data:

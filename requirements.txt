@@ -1,0 +1,8 @@
+pymongo>=4.6.0
+pyyaml>=6.0.1
+pywikibot>=8.2.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+requests>=2.31.0
+pandas
+matplotlib
